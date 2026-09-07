@@ -1,58 +1,112 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
-import { useAppStore } from "@/stores/useAppStore";
+import { motion, AnimatePresence } from "framer-motion";
+import { useAIStore } from "@/stores/useAIStore";
 
-export type AIStatusType = "idle" | "listening" | "thinking" | "speaking" | "error";
-
-interface AIStatusProps {
-  status: AIStatusType;
-  text?: string;
-}
-
-const STATUS_CONFIG: Record<AIStatusType, { label: string; color: string; pulse: boolean }> = {
+const STATUS_CONFIG: Record<
+  string,
+  { label: string; color: string; pulse: boolean }
+> = {
   idle: { label: "NEXUS IDLE", color: "#3B82F6", pulse: false },
   listening: { label: "LISTENING", color: "#00D4AA", pulse: true },
   thinking: { label: "THINKING", color: "#8B5CF6", pulse: true },
-  speaking: { label: "SPEAKING", color: "#06B6D4", pulse: false },
-  error: { label: "ERROR", color: "#EF4444", pulse: false },
+  speaking: { label: "SPEAKING", color: "#06B6D4", pulse: true },
+  streaming: { label: "STREAMING", color: "#00D4AA", pulse: true },
+  interrupted: { label: "INTERRUPTED", color: "#F59E0B", pulse: false },
+  offline: { label: "OFFLINE", color: "#EF4444", pulse: false },
 };
 
-export function AIStatus({ status, text }: AIStatusProps) {
-  const config = STATUS_CONFIG[status];
+export function AIStatusIndicator() {
+  const status = useAIStore((s) => s.status);
+  const interimTranscript = useAIStore((s) => s.interimTranscript);
+  const config = STATUS_CONFIG[status] || STATUS_CONFIG.idle;
 
   return (
-    <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50 pointer-events-none">
-      <div className="flex items-center gap-3">
-        {/* Status dot */}
-        <div className="relative">
-          <div
-            className="w-2.5 h-2.5 rounded-full"
-            style={{ backgroundColor: config.color }}
-          />
-          {config.pulse && (
-            <div
-              className="absolute inset-0 w-2.5 h-2.5 rounded-full animate-ping"
-              style={{ backgroundColor: config.color, opacity: 0.4 }}
-            />
-          )}
-        </div>
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      style={{
+        position: "fixed",
+        bottom: "80px",
+        left: "50%",
+        transform: "translateX(-50%)",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        gap: "8px",
+        zIndex: 100,
+        pointerEvents: "none",
+      }}
+    >
+      <AnimatePresence>
+        {interimTranscript && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.9 }}
+            style={{
+              background: "rgba(15, 15, 35, 0.8)",
+              border: "1px solid rgba(100, 150, 255, 0.2)",
+              borderRadius: "12px",
+              padding: "8px 16px",
+              color: "#E2E8F0",
+              fontSize: "14px",
+              fontFamily: "var(--font-geist-mono)",
+              maxWidth: "400px",
+              textAlign: "center",
+              backdropFilter: "blur(10px)",
+            }}
+          >
+            {interimTranscript}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-        {/* Status label */}
+      <motion.div
+        animate={{
+          boxShadow: config.pulse
+            ? [
+                `0 0 10px ${config.color}40`,
+                `0 0 25px ${config.color}60`,
+                `0 0 10px ${config.color}40`,
+              ]
+            : `0 0 10px ${config.color}20`,
+        }}
+        transition={
+          config.pulse ? { duration: 1.5, repeat: Infinity } : {}
+        }
+        style={{
+          background: "rgba(15, 15, 35, 0.9)",
+          border: `1px solid ${config.color}50`,
+          borderRadius: "20px",
+          padding: "6px 20px",
+          display: "flex",
+          alignItems: "center",
+          gap: "8px",
+          backdropFilter: "blur(10px)",
+        }}
+      >
+        <div
+          style={{
+            width: "8px",
+            height: "8px",
+            borderRadius: "50%",
+            backgroundColor: config.color,
+            boxShadow: `0 0 6px ${config.color}`,
+          }}
+        />
         <span
-          className="text-[10px] tracking-[0.2em] font-mono uppercase"
-          style={{ color: config.color }}
+          style={{
+            color: config.color,
+            fontSize: "11px",
+            fontFamily: "var(--font-geist-mono)",
+            letterSpacing: "2px",
+            fontWeight: 600,
+          }}
         >
           {config.label}
         </span>
-
-        {/* Interim text */}
-        {text && status === "listening" && (
-          <span className="text-[10px] tracking-wider font-mono text-white/40 max-w-[200px] truncate">
-            &quot;{text}&quot;
-          </span>
-        )}
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 }

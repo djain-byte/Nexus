@@ -84,6 +84,27 @@ class AudioManager {
     // Disabled — was causing continuous humming
     return undefined;
   }
+
+  playActivation() {
+    this.playTone(440, 0.15, 0.2, "sine");
+    setTimeout(() => this.playTone(660, 0.15, 0.2, "sine"), 100);
+    setTimeout(() => this.playTone(880, 0.1, 0.15, "sine"), 200);
+  }
+
+  playListeningBlip() {
+    this.playTone(800, 0.08, 0.1, "sine");
+  }
+
+  playResponseStart() {
+    this.playTone(880, 0.1, 0.15, "sine");
+    setTimeout(() => this.playTone(660, 0.15, 0.1, "sine"), 80);
+  }
+
+  playWakeSound() {
+    this.playTone(523, 0.1, 0.2, "sine");
+    setTimeout(() => this.playTone(659, 0.1, 0.2, "sine"), 100);
+    setTimeout(() => this.playTone(784, 0.15, 0.15, "sine"), 200);
+  }
 }
 
 export const audioManager = new AudioManager();
@@ -118,5 +139,9 @@ export function useAudio() {
     playPinch: () => audioManager.playPinch(),
     playRelease: () => audioManager.playRelease(),
     playSelect: () => audioManager.playSelect(),
+    playActivation: () => audioManager.playActivation(),
+    playWakeSound: () => audioManager.playWakeSound(),
+    playResponseStart: () => audioManager.playResponseStart(),
+    playListeningBlip: () => audioManager.playListeningBlip(),
   };
 }

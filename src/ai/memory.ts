@@ -2,6 +2,7 @@ export interface MemoryEntry {
   role: "user" | "assistant";
   content: string;
   timestamp: number;
+  moduleContext?: string;
 }
 
 export class ConversationMemory {
@@ -23,24 +24,16 @@ export class ConversationMemory {
     return [...this.entries];
   }
 
-  getLast(n: number = 5): MemoryEntry[] {
-    return this.entries.slice(-n);
-  }
-
   getContextSummary(): string {
     if (this.entries.length === 0) return "No prior conversation.";
 
-    const recent = this.entries.slice(-6);
+    const recent = this.entries.slice(-5);
     return recent
-      .map((e) => `${e.role === "user" ? "User" : "NEXUS"}: ${e.content.slice(0, 100)}`)
+      .map((e) => `${e.role}: ${e.content.slice(0, 100)}`)
       .join("\n");
   }
 
   clear() {
     this.entries = [];
-  }
-
-  size(): number {
-    return this.entries.length;
   }
 }

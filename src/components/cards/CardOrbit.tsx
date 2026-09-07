@@ -23,8 +23,11 @@ export function CardOrbit({ onSwipe, onPinch, onRelease, onSelect }: CardOrbitPr
   const lastGestureTimeRef = useRef(0);
   const [centerIndex, setCenterIndex] = useState(0);
 
-  const { currentGesture, handDetected } = useGestureStore();
-  const { setCarouselAngle } = useAppStore();
+  const gestureType = useGestureStore((s) => s.currentGesture.type);
+  const gestureVelocity = useGestureStore((s) => s.currentGesture.velocity);
+  const gestureSpeed = useGestureStore((s) => s.currentGesture.speed);
+  const handDetected = useGestureStore((s) => s.handDetected);
+  const setCarouselAngle = useAppStore((s) => s.setCarouselAngle);
 
   useEffect(() => {
     const handleMouseRotate = (e: Event) => {
@@ -38,25 +41,23 @@ export function CardOrbit({ onSwipe, onPinch, onRelease, onSelect }: CardOrbitPr
   }, []);
 
   useEffect(() => {
-    const gesture = currentGesture;
     const now = performance.now();
-    const type = gesture.type;
 
-    if (type === "none" || type === "idle" || type === "palm_still") return;
+    if (gestureType === "none" || gestureType === "idle" || gestureType === "palm_still") return;
 
-    if (type === lastGestureRef.current && now - lastGestureTimeRef.current < 200) return;
+    if (gestureType === lastGestureRef.current && now - lastGestureTimeRef.current < 200) return;
 
-    lastGestureRef.current = type;
+    lastGestureRef.current = gestureType;
     lastGestureTimeRef.current = now;
 
-    if (gesture.speed > 0) {
-      const rotationForce = gesture.velocity.x * 0.8;
+    if (gestureSpeed > 0) {
+      const rotationForce = gestureVelocity.x * 0.8;
       velocityRef.current -= rotationForce;
       onSwipe?.();
       return;
     }
 
-    switch (type) {
+    switch (gestureType) {
       case "slow_scroll_left":
         velocityRef.current += 0.15;
         onSwipe?.();
@@ -90,7 +91,7 @@ export function CardOrbit({ onSwipe, onPinch, onRelease, onSelect }: CardOrbitPr
         onSwipe?.();
         break;
     }
-  }, [currentGesture, onSwipe]);
+  }, [gestureType, gestureVelocity, gestureSpeed, onSwipe]);
 
   useFrame((_, delta) => {
     if (!groupRef.current) return;

@@ -1,164 +1,216 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
-import { useAppStore } from "@/stores/useAppStore";
+import { useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { useAIStore } from "@/stores/useAIStore";
 
 interface AIPanelProps {
   isVisible: boolean;
-  responseText: string;
-  status: "idle" | "listening" | "thinking" | "speaking" | "error";
   onClose: () => void;
+  onActivate: () => void;
 }
 
-export function AIPanel({ isVisible, responseText, status, onClose }: AIPanelProps) {
-  const [displayText, setDisplayText] = useState("");
-  const [cursorVisible, setCursorVisible] = useState(true);
-  const containerRef = useRef<HTMLDivElement>(null);
+export function AIPanel({ isVisible, onClose, onActivate }: AIPanelProps) {
+  const apiKey = useAIStore((s) => s.apiKey);
+  const setApiKey = useAIStore((s) => s.setApiKey);
+  const status = useAIStore((s) => s.status);
+  const history = useAIStore((s) => s.history);
+  const [keyInput, setKeyInput] = useState(apiKey);
+  const [saved, setSaved] = useState(false);
 
-  // Typewriter effect
-  useEffect(() => {
-    if (!responseText) {
-      setDisplayText("");
-      return;
-    }
-
-    let index = 0;
-    setDisplayText("");
-    const interval = setInterval(() => {
-      if (index < responseText.length) {
-        setDisplayText(responseText.slice(0, index + 1));
-        index++;
-      } else {
-        clearInterval(interval);
-      }
-    }, 12);
-
-    return () => clearInterval(interval);
-  }, [responseText]);
-
-  // Blinking cursor
-  useEffect(() => {
-    const interval = setInterval(() => setCursorVisible((v) => !v), 530);
-    return () => clearInterval(interval);
-  }, []);
-
-  // Auto-scroll
-  useEffect(() => {
-    if (containerRef.current) {
-      containerRef.current.scrollTop = containerRef.current.scrollHeight;
-    }
-  }, [displayText]);
-
-  if (!isVisible) return null;
+  const handleSave = () => {
+    setApiKey(keyInput.trim());
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  };
 
   return (
-    <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-40 pointer-events-auto w-[480px] max-w-[90vw]">
-      <div
-        className="relative rounded-2xl border overflow-hidden"
-        style={{
-          background: "rgba(8, 8, 24, 0.85)",
-          borderColor: "rgba(59, 130, 246, 0.25)",
-          backdropFilter: "blur(20px)",
-          boxShadow: "0 0 60px rgba(59, 130, 246, 0.1), inset 0 0 60px rgba(5, 5, 16, 0.5)",
-        }}
-      >
-        {/* Top bar */}
-        <div
-          className="flex items-center justify-between px-4 py-2.5 border-b"
-          style={{ borderColor: "rgba(59, 130, 246, 0.15)" }}
+    <AnimatePresence>
+      {isVisible && (
+        <motion.div
+          initial={{ opacity: 0, x: 300 }}
+          animate={{ opacity: 1, x: 0 }}
+          exit={{ opacity: 0, x: 300 }}
+          transition={{ type: "spring", stiffness: 200, damping: 25 }}
+          style={{
+            position: "fixed",
+            top: "60px",
+            right: "20px",
+            width: "360px",
+            maxHeight: "80vh",
+            background: "rgba(10, 10, 30, 0.95)",
+            border: "1px solid rgba(100, 150, 255, 0.2)",
+            borderRadius: "16px",
+            padding: "24px",
+            zIndex: 200,
+            backdropFilter: "blur(20px)",
+            display: "flex",
+            flexDirection: "column",
+            gap: "16px",
+            overflow: "hidden",
+          }}
         >
-          <div className="flex items-center gap-2">
-            <div className="w-1.5 h-1.5 rounded-full bg-[#3B82F6]" />
-            <span className="text-[10px] tracking-[0.15em] text-[#64748B] font-mono uppercase">
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+            }}
+          >
+            <span
+              style={{
+                color: "#3B82F6",
+                fontFamily: "var(--font-geist-mono)",
+                fontSize: "13px",
+                letterSpacing: "2px",
+              }}
+            >
               NEXUS AI
             </span>
-          </div>
-          <button
-            onClick={onClose}
-            className="text-[#475569] hover:text-white transition-colors text-xs font-mono"
-          >
-            [ESC]
-          </button>
-        </div>
-
-        {/* Content area */}
-        <div
-          ref={containerRef}
-          className="px-5 py-4 max-h-[300px] overflow-y-auto scrollbar-thin"
-        >
-          {status === "thinking" && !displayText && (
-            <div className="flex items-center gap-2 py-2">
-              <div className="flex gap-1">
-                {[0, 1, 2].map((i) => (
-                  <div
-                    key={i}
-                    className="w-1.5 h-1.5 rounded-full bg-[#8B5CF6] animate-bounce"
-                    style={{ animationDelay: `${i * 0.15}s` }}
-                  />
-                ))}
-              </div>
-              <span className="text-[10px] tracking-[0.15em] text-[#8B5CF6] font-mono">
-                PROCESSING
-              </span>
-            </div>
-          )}
-
-          {displayText && (
-            <div className="text-sm text-[#CBD5E1] font-mono leading-relaxed whitespace-pre-wrap">
-              {displayText}
-              {status === "speaking" && (
-                <span
-                  className="inline-block w-[2px] h-[14px] ml-0.5 align-middle"
-                  style={{
-                    backgroundColor: "#06B6D4",
-                    opacity: cursorVisible ? 1 : 0,
-                  }}
-                />
-              )}
-            </div>
-          )}
-
-          {status === "error" && (
-            <div className="text-xs text-[#EF4444] font-mono py-1">
-              Connection error. Please try again.
-            </div>
-          )}
-        </div>
-
-        {/* Bottom status bar */}
-        <div
-          className="flex items-center justify-between px-4 py-2 border-t"
-          style={{ borderColor: "rgba(59, 130, 246, 0.1)" }}
-        >
-          <div className="flex items-center gap-2">
-            <div
-              className="w-1.5 h-1.5 rounded-full"
+            <button
+              onClick={onClose}
               style={{
-                backgroundColor:
-                  status === "thinking"
-                    ? "#8B5CF6"
-                    : status === "speaking"
-                    ? "#06B6D4"
-                    : status === "error"
-                    ? "#EF4444"
-                    : "#3B82F6",
+                color: "#64748B",
+                background: "none",
+                border: "none",
+                cursor: "pointer",
+                fontSize: "18px",
+              }}
+            >
+              ✕
+            </button>
+          </div>
+
+          <div
+            style={{ display: "flex", flexDirection: "column", gap: "8px" }}
+          >
+            <label
+              style={{
+                color: "#94A3B8",
+                fontSize: "11px",
+                fontFamily: "var(--font-geist-mono)",
+                letterSpacing: "1px",
+              }}
+            >
+              GEMINI API KEY
+            </label>
+            <input
+              type="password"
+              value={keyInput}
+              onChange={(e) => setKeyInput(e.target.value)}
+              placeholder="Enter your Gemini API key..."
+              style={{
+                background: "rgba(15, 15, 35, 0.8)",
+                border: "1px solid rgba(100, 150, 255, 0.15)",
+                borderRadius: "8px",
+                padding: "10px 12px",
+                color: "#E2E8F0",
+                fontSize: "13px",
+                fontFamily: "var(--font-geist-mono)",
+                outline: "none",
               }}
             />
-            <span className="text-[9px] tracking-[0.2em] text-[#475569] font-mono uppercase">
-              {status === "thinking"
-                ? "ANALYZING"
-                : status === "speaking"
-                ? "RESPONSE"
-                : status === "error"
-                ? "OFFLINE"
-                : "READY"}
-            </span>
+            <button
+              onClick={handleSave}
+              style={{
+                background: saved ? "#00D4AA20" : "#3B82F620",
+                border: `1px solid ${saved ? "#00D4AA" : "#3B82F6"}50`,
+                borderRadius: "8px",
+                padding: "8px",
+                color: saved ? "#00D4AA" : "#3B82F6",
+                fontSize: "12px",
+                fontFamily: "var(--font-geist-mono)",
+                cursor: "pointer",
+                letterSpacing: "1px",
+              }}
+            >
+              {saved ? "✓ SAVED" : "SAVE KEY"}
+            </button>
           </div>
-          <span className="text-[9px] text-[#334155] font-mono">
-            {displayText.length > 0 ? `${displayText.length} chars` : ""}
-          </span>
-        </div>
-      </div>
-    </div>
+
+          {apiKey && (
+            <button
+              onClick={onActivate}
+              style={{
+                background:
+                  status === "idle" ? "#3B82F620" : "#EF444420",
+                border: `1px solid ${status === "idle" ? "#3B82F6" : "#EF4444"}50`,
+                borderRadius: "8px",
+                padding: "10px",
+                color: status === "idle" ? "#3B82F6" : "#EF4444",
+                fontSize: "12px",
+                fontFamily: "var(--font-geist-mono)",
+                cursor: "pointer",
+                letterSpacing: "1px",
+              }}
+            >
+              {status === "idle"
+                ? "▶ ACTIVATE NEXUS VOICE"
+                : "■ DEACTIVATE"}
+            </button>
+          )}
+
+          {history.length > 0 && (
+            <div
+              style={{
+                flex: 1,
+                overflowY: "auto",
+                display: "flex",
+                flexDirection: "column",
+                gap: "8px",
+                maxHeight: "300px",
+              }}
+            >
+              <span
+                style={{
+                  color: "#64748B",
+                  fontSize: "10px",
+                  fontFamily: "var(--font-geist-mono)",
+                  letterSpacing: "1px",
+                }}
+              >
+                CONVERSATION LOG
+              </span>
+              {history.slice(-10).map((entry, i) => (
+                <div
+                  key={i}
+                  style={{
+                    padding: "8px 10px",
+                    borderRadius: "8px",
+                    background:
+                      entry.role === "user"
+                        ? "rgba(59, 130, 246, 0.1)"
+                        : "rgba(139, 92, 246, 0.1)",
+                    borderLeft: `2px solid ${entry.role === "user" ? "#3B82F6" : "#8B5CF6"}`,
+                  }}
+                >
+                  <span
+                    style={{
+                      color: "#94A3B8",
+                      fontSize: "9px",
+                      fontFamily: "var(--font-geist-mono)",
+                      letterSpacing: "1px",
+                    }}
+                  >
+                    {entry.role === "user" ? "YOU" : "NEXUS"}
+                  </span>
+                  <p
+                    style={{
+                      color: "#E2E8F0",
+                      fontSize: "12px",
+                      margin: "4px 0 0",
+                      lineHeight: 1.4,
+                    }}
+                  >
+                    {entry.content.slice(0, 150)}
+                    {entry.content.length > 150 ? "..." : ""}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 }

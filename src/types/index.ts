@@ -21,7 +21,8 @@ export type GestureType =
   | "two_hand_zoom"
   | "thumbs_up"
   | "victory"
-  | "iloveyou";
+  | "iloveyou"
+  | "circle";
 
 export type CardState = "idle" | "hovered" | "selected" | "expanded" | "focused" | "dragging";
 
@@ -75,6 +76,22 @@ export interface GestureState {
   handDetected: boolean;
   landmarks: HandLandmark[];
   confidence: number;
+}
+
+export type AIStatus =
+  | "idle"
+  | "listening"
+  | "thinking"
+  | "speaking"
+  | "interrupted"
+  | "offline"
+  | "streaming";
+
+export interface ConversationEntry {
+  role: "user" | "assistant";
+  content: string;
+  timestamp: number;
+  moduleContext?: string;
 }
 
 export interface SceneState {

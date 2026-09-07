@@ -13,14 +13,16 @@ export function VolumetricFog() {
         uniforms: {
           uTime: { value: 0 },
           uColor: { value: new THREE.Color("#0a0a2e") },
-          uOpacity: { value: 0.15 },
+          uOpacity: { value: 0.12 },
         },
         vertexShader: `
           varying vec2 vUv;
           varying vec3 vPosition;
+          varying vec3 vWorldPosition;
           void main() {
             vUv = uv;
             vPosition = position;
+            vWorldPosition = (modelMatrix * vec4(position, 1.0)).xyz;
             gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
           }
         `,
@@ -30,50 +32,53 @@ export function VolumetricFog() {
           uniform float uOpacity;
           varying vec2 vUv;
           varying vec3 vPosition;
+          varying vec3 vWorldPosition;
 
-          float noise(vec2 p) {
-            return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453);
+          float hash(vec3 p) {
+            p = fract(p * vec3(0.1031, 0.1030, 0.0973));
+            p += dot(p, p.yxz + 33.33);
+            return fract((p.x + p.y) * p.z);
           }
 
-          float smoothNoise(vec2 p) {
-            vec2 i = floor(p);
-            vec2 f = fract(p);
+          float noise(vec3 p) {
+            vec3 i = floor(p);
+            vec3 f = fract(p);
             f = f * f * (3.0 - 2.0 * f);
-            float a = noise(i);
-            float b = noise(i + vec2(1.0, 0.0));
-            float c = noise(i + vec2(0.0, 1.0));
-            float d = noise(i + vec2(1.0, 1.0));
-            return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+            return mix(
+              mix(mix(hash(i), hash(i + vec3(1,0,0)), f.x),
+                  mix(hash(i + vec3(0,1,0)), hash(i + vec3(1,1,0)), f.x), f.y),
+              mix(mix(hash(i + vec3(0,0,1)), hash(i + vec3(1,0,1)), f.x),
+                  mix(hash(i + vec3(0,1,1)), hash(i + vec3(1,1,1)), f.x), f.y), f.z
+            );
           }
 
-          float fbm(vec2 p) {
-            float total = 0.0;
+          float fbm(vec3 p) {
+            float value = 0.0;
             float amplitude = 0.5;
-            for(int i = 0; i < 4; i++) {
-              total += smoothNoise(p) * amplitude;
+            for (int i = 0; i < 4; i++) {
+              value += amplitude * noise(p);
               p *= 2.0;
               amplitude *= 0.5;
             }
-            return total;
+            return value;
           }
 
           void main() {
-            vec2 uv = vUv;
-            float n = fbm(uv * 3.0 + uTime * 0.05);
-            float n2 = fbm(uv * 5.0 - uTime * 0.03);
+            vec3 pos = vWorldPosition * 0.15 + vec3(uTime * 0.02, uTime * 0.01, 0.0);
+            float f = fbm(pos);
+            float n2 = fbm(pos * 1.5 + vec3(10.0));
+            float fog = f * 0.6 + n2 * 0.4;
 
-            float fog = n * 0.5 + n2 * 0.3;
-            fog = smoothstep(0.2, 0.8, fog);
+            vec3 viewDir = normalize(cameraPosition - vWorldPosition);
+            float fresnel = 1.0 - abs(dot(normalize(vPosition), viewDir));
+            fresnel = pow(fresnel, 2.0);
 
-            float edge = smoothstep(0.0, 0.3, vUv.x) * smoothstep(1.0, 0.7, vUv.x);
-            edge *= smoothstep(0.0, 0.3, vUv.y) * smoothstep(1.0, 0.7, vUv.y);
-
-            float alpha = fog * uOpacity * edge;
+            float alpha = fog * uOpacity * (0.5 + fresnel * 0.5);
             gl_FragColor = vec4(uColor, alpha);
           }
         `,
         transparent: true,
-        side: THREE.DoubleSide,
+        side: THREE.BackSide,
         depthWrite: false,
         blending: THREE.AdditiveBlending,
       }),
@@ -85,8 +90,8 @@ export function VolumetricFog() {
   });
 
   return (
-    <mesh ref={meshRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, -2, 0]}>
-      <planeGeometry args={[40, 40, 1, 1]} />
+    <mesh ref={meshRef}>
+      <sphereGeometry args={[15, 32, 32]} />
       <primitive object={material} attach="material" />
     </mesh>
   );

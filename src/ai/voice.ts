@@ -1,17 +1,18 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-export type VoiceStatus = "idle" | "listening" | "processing" | "speaking" | "error";
 
-export interface VoiceConfig {
-  wakeWord?: string;
-  language?: string;
-  continuous?: boolean;
-}
+export type VoiceStatus =
+  | "idle"
+  | "listening"
+  | "processing"
+  | "speaking"
+  | "error";
 
 interface VoiceCallbacks {
-  onTranscript?: (text: string, isFinal: boolean) => void;
-  onWakeWord?: () => void;
-  onStatusChange?: (status: VoiceStatus) => void;
-  onError?: (error: string) => void;
+  onTranscript: (text: string, isFinal: boolean) => void;
+  onWakeWord: () => void;
+  onStatusChange: (status: VoiceStatus) => void;
+  onError: (error: string) => void;
+  onSpeechEnd: () => void;
 }
 
 declare global {
@@ -24,103 +25,114 @@ declare global {
 export class VoiceManager {
   private recognition: any = null;
   private synthesis: SpeechSynthesis | null = null;
+  private callbacks: VoiceCallbacks;
   private wakeWord: string;
-  private language: string;
-  private continuous: boolean;
-  private status: VoiceStatus = "idle";
-  private callbacks: VoiceCallbacks = {};
-  private isListening = false;
-  private wakeWordMode = true;
+  private isListening: boolean = false;
+  private isSpeaking: boolean = false;
+  private preferredVoice: SpeechSynthesisVoice | null = null;
 
-  constructor(config: VoiceConfig = {}) {
-    this.wakeWord = config.wakeWord || "nexus";
-    this.language = config.language || "en-US";
-    this.continuous = config.continuous !== false;
+  constructor(callbacks: VoiceCallbacks, wakeWord: string = "nexus") {
+    this.callbacks = callbacks;
+    this.wakeWord = wakeWord.toLowerCase();
 
     if (typeof window !== "undefined") {
       this.synthesis = window.speechSynthesis;
+      this.selectVoice();
     }
   }
 
-  onCallbacks(cb: VoiceCallbacks) {
-    this.callbacks = { ...this.callbacks, ...cb };
+  private selectVoice() {
+    if (!this.synthesis) return;
+
+    const pickVoice = () => {
+      const voices = this.synthesis!.getVoices();
+      this.preferredVoice =
+        voices.find((v) => v.name.includes("Samantha")) ||
+        voices.find((v) => v.name.includes("Google UK English Female")) ||
+        voices.find((v) => v.name.includes("Google US English")) ||
+        voices.find((v) => v.lang.startsWith("en") && v.localService) ||
+        voices[0] ||
+        null;
+    };
+
+    pickVoice();
+    this.synthesis.onvoiceschanged = pickVoice;
   }
 
-  private setStatus(status: VoiceStatus) {
-    this.status = status;
-    this.callbacks.onStatusChange?.(status);
-  }
+  startListening(directMode: boolean = false) {
+    if (this.isListening) return;
 
-  isSupported(): boolean {
-    return !!(
-      typeof window !== "undefined" &&
-      (window.SpeechRecognition || window.webkitSpeechRecognition)
-    );
-  }
-
-  start() {
-    if (!this.isSupported()) {
-      this.callbacks.onError?.("Speech recognition not supported in this browser");
+    const SpeechRecognition =
+      window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      this.callbacks.onError(
+        "Speech recognition not supported in this browser"
+      );
       return;
     }
 
-    const SpeechRecognitionClass = window.SpeechRecognition || window.webkitSpeechRecognition;
-    this.recognition = new SpeechRecognitionClass();
-    this.recognition.lang = this.language;
+    this.recognition = new SpeechRecognition();
     this.recognition.continuous = true;
     this.recognition.interimResults = true;
-    this.recognition.maxAlternatives = 1;
+    this.recognition.lang = "en-US";
 
     this.recognition.onresult = (event: any) => {
-      let interimText = "";
-      let finalText = "";
+      let interimTranscript = "";
+      let finalTranscript = "";
 
       for (let i = event.resultIndex; i < event.results.length; i++) {
         const transcript = event.results[i][0].transcript;
         if (event.results[i].isFinal) {
-          finalText += transcript;
+          finalTranscript += transcript;
         } else {
-          interimText += transcript;
+          interimTranscript += transcript;
         }
       }
 
-      const fullText = (finalText || interimText).toLowerCase().trim();
-
-      if (this.wakeWordMode) {
-        if (fullText.includes(this.wakeWord)) {
-          this.wakeWordMode = false;
-          this.callbacks.onWakeWord?.();
-          this.setStatus("listening");
-          const cleaned = fullText.replace(this.wakeWord, "").trim();
-          if (cleaned) {
-            this.callbacks.onTranscript?.(cleaned, !!finalText);
-          }
-        }
+      if (
+        !directMode &&
+        interimTranscript.toLowerCase().includes(this.wakeWord)
+      ) {
+        this.callbacks.onWakeWord();
         return;
       }
 
-      if (interimText) {
-        this.callbacks.onTranscript?.(interimText, false);
+      if (interimTranscript) {
+        this.callbacks.onTranscript(interimTranscript, false);
       }
 
-      if (finalText) {
-        this.callbacks.onTranscript?.(finalText, true);
-        this.wakeWordMode = true;
+      if (finalTranscript) {
+        if (
+          !directMode &&
+          finalTranscript.toLowerCase().includes(this.wakeWord)
+        ) {
+          this.callbacks.onWakeWord();
+          const afterWake = finalTranscript
+            .toLowerCase()
+            .split(this.wakeWord)
+            .pop()
+            ?.trim();
+          if (afterWake && afterWake.length > 2) {
+            this.callbacks.onTranscript(afterWake, true);
+          }
+        } else {
+          this.callbacks.onTranscript(finalTranscript, true);
+        }
       }
     };
 
     this.recognition.onerror = (event: any) => {
-      if (event.error === "no-speech") return;
-      if (event.error === "aborted") return;
-      this.callbacks.onError?.(`Speech error: ${event.error}`);
+      if (event.error !== "no-speech" && event.error !== "aborted") {
+        this.callbacks.onError(`Recognition error: ${event.error}`);
+      }
     };
 
     this.recognition.onend = () => {
       if (this.isListening) {
         try {
-          this.recognition?.start();
+          this.recognition.start();
         } catch {
-          // already started
+          // Already started
         }
       }
     };
@@ -128,26 +140,28 @@ export class VoiceManager {
     try {
       this.recognition.start();
       this.isListening = true;
-      this.setStatus("listening");
+      this.callbacks.onStatusChange("listening");
     } catch {
-      this.callbacks.onError?.("Failed to start speech recognition");
+      this.callbacks.onError("Failed to start speech recognition");
     }
   }
 
-  stop() {
+  stopListening() {
     this.isListening = false;
-    this.wakeWordMode = true;
-    try {
-      this.recognition?.stop();
-    } catch {
-      // ignore
+    if (this.recognition) {
+      try {
+        this.recognition.stop();
+      } catch {
+        // Ignore
+      }
+      this.recognition = null;
     }
-    this.setStatus("idle");
+    this.callbacks.onStatusChange("idle");
   }
 
-  speak(text: string, options?: { rate?: number; pitch?: number; volume?: number }): Promise<void> {
-    return new Promise((resolve, reject) => {
-      if (!this.synthesis) {
+  speak(text: string): Promise<void> {
+    return new Promise((resolve) => {
+      if (!this.synthesis || !text.trim()) {
         resolve();
         return;
       }
@@ -155,49 +169,51 @@ export class VoiceManager {
       this.synthesis.cancel();
 
       const utterance = new SpeechSynthesisUtterance(text);
-      utterance.lang = this.language;
-      utterance.rate = options?.rate || 1.05;
-      utterance.pitch = options?.pitch || 1.0;
-      utterance.volume = options?.volume || 0.9;
 
-      const voices = this.synthesis.getVoices();
-      const preferred = voices.find(
-        (v) =>
-          v.name.includes("Google") ||
-          v.name.includes("Samantha") ||
-          v.name.includes("Daniel") ||
-          v.lang.startsWith("en")
-      );
-      if (preferred) utterance.voice = preferred;
+      if (this.preferredVoice) {
+        utterance.voice = this.preferredVoice;
+      }
 
-      utterance.onstart = () => this.setStatus("speaking");
+      utterance.rate = 1.05;
+      utterance.pitch = 1.0;
+      utterance.volume = 0.85;
+
+      utterance.onstart = () => {
+        this.isSpeaking = true;
+        this.callbacks.onStatusChange("speaking");
+      };
+
       utterance.onend = () => {
-        this.setStatus("idle");
+        this.isSpeaking = false;
+        this.callbacks.onSpeechEnd();
         resolve();
       };
+
       utterance.onerror = () => {
-        this.setStatus("error");
-        reject(new Error("Speech synthesis error"));
+        this.isSpeaking = false;
+        resolve();
       };
 
       this.synthesis.speak(utterance);
     });
   }
 
-  stopSpeaking() {
-    this.synthesis?.cancel();
-    this.setStatus("idle");
+  interrupt() {
+    if (this.synthesis && this.isSpeaking) {
+      this.synthesis.cancel();
+      this.isSpeaking = false;
+      this.callbacks.onStatusChange("idle");
+    }
   }
 
-  getStatus(): VoiceStatus {
-    return this.status;
+  getIsSpeaking(): boolean {
+    return this.isSpeaking;
   }
 
-  setWakeWordMode(enabled: boolean) {
-    this.wakeWordMode = enabled;
-  }
-
-  isWakeWordMode(): boolean {
-    return this.wakeWordMode;
+  destroy() {
+    this.stopListening();
+    if (this.synthesis) {
+      this.synthesis.cancel();
+    }
   }
 }

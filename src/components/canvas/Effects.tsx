@@ -5,6 +5,7 @@ import {
   Bloom,
   ChromaticAberration,
   Vignette,
+  DepthOfField,
 } from "@react-three/postprocessing";
 import { BlendFunction } from "postprocessing";
 import * as THREE from "three";
@@ -12,6 +13,11 @@ import * as THREE from "three";
 export function Effects() {
   return (
     <EffectComposer multisampling={4}>
+      <DepthOfField
+        focusDistance={0.01}
+        focalLength={0.05}
+        bokehScale={3}
+      />
       <Bloom
         intensity={0.8}
         luminanceThreshold={0.2}
@@ -22,14 +28,8 @@ export function Effects() {
       <ChromaticAberration
         blendFunction={BlendFunction.NORMAL}
         offset={[0.0005, 0.0005] as unknown as THREE.Vector2}
-        radialModulation={true}
-        modulationOffset={0.5}
       />
-      <Vignette
-        offset={0.3}
-        darkness={0.7}
-        blendFunction={BlendFunction.NORMAL}
-      />
+      <Vignette eskil={false} offset={0.1} darkness={0.8} />
     </EffectComposer>
   );
 }

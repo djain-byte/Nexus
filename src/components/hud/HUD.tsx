@@ -5,8 +5,15 @@ import { useAppStore } from "@/stores/useAppStore";
 import { useGestureStore } from "@/stores/useGestureStore";
 
 export function HUD() {
-  const { fps, quality } = useAppStore();
-  const { currentGesture, handDetected, tracking: trackStatus } = useGestureStore();
+  const fps = useAppStore((s) => s.fps);
+  const quality = useAppStore((s) => s.quality);
+  const gestureType = useGestureStore((s) => s.currentGesture.type);
+  const gestureConfidence = useGestureStore((s) => s.currentGesture.confidence);
+  const gestureSpeed = useGestureStore((s) => s.currentGesture.speed);
+  const gestureDepth = useGestureStore((s) => s.currentGesture.depth);
+  const handDetected = useGestureStore((s) => s.handDetected);
+  const trackStatus = useGestureStore((s) => s.tracking);
+
   const [time, setTime] = useState(new Date());
   const [systemLog, setSystemLog] = useState<string[]>([]);
 
@@ -16,16 +23,16 @@ export function HUD() {
   }, []);
 
   useEffect(() => {
-    if (currentGesture.type !== "none" && currentGesture.type !== "idle") {
+    if (gestureType !== "none" && gestureType !== "idle") {
       setSystemLog((prev) => {
         const next = [
-          `[${time.toLocaleTimeString()}] ${currentGesture.type} (${Math.round(currentGesture.confidence * 100)}%) spd:${currentGesture.speed.toFixed(2)}`,
+          `[${time.toLocaleTimeString()}] ${gestureType} (${Math.round(gestureConfidence * 100)}%) spd:${gestureSpeed.toFixed(2)}`,
           ...prev,
         ];
         return next.slice(0, 6);
       });
     }
-  }, [currentGesture, time]);
+  }, [gestureType, gestureConfidence, gestureSpeed, time]);
 
   const formatTime = (d: Date) =>
     d.toLocaleTimeString("en-US", {
@@ -46,6 +53,8 @@ export function HUD() {
     const labels: Record<string, string> = {
       swipe_left: "SWIPE LEFT",
       swipe_right: "SWIPE RIGHT",
+      swipe_up: "SWIPE UP",
+      swipe_down: "SWIPE DOWN",
       slow_scroll_left: "SCROLL SLOW LEFT",
       slow_scroll_right: "SCROLL SLOW RIGHT",
       fast_scroll_left: "SCROLL FAST LEFT",
@@ -109,25 +118,25 @@ export function HUD() {
 
       {/* Bottom Right - Active Gesture */}
       <div className="absolute bottom-4 right-4 text-right space-y-1">
-        {handDetected && currentGesture.type !== "none" && (
+        {handDetected && gestureType !== "none" && (
           <>
             <div className="text-cyan-400/80 text-[10px] tracking-widest">
-              {gestureLabel(currentGesture.type)}
+              {gestureLabel(gestureType)}
             </div>
             <div className="text-slate-500 text-[10px] tracking-wider">
-              CONF: <span className="text-cyan-400/60">{Math.round(currentGesture.confidence * 100)}%</span>
+              CONF: <span className="text-cyan-400/60">{Math.round(gestureConfidence * 100)}%</span>
             </div>
-            {currentGesture.speed > 0 && (
+            {gestureSpeed > 0 && (
               <div className="text-slate-500 text-[10px] tracking-wider">
-                SPD: <span className="text-cyan-400/60">{currentGesture.speed.toFixed(2)}</span>
+                SPD: <span className="text-cyan-400/60">{gestureSpeed.toFixed(2)}</span>
               </div>
             )}
             <div className="text-slate-500 text-[10px] tracking-wider">
-              DEPTH: <span className="text-cyan-400/60">{currentGesture.depth.toFixed(3)}</span>
+              DEPTH: <span className="text-cyan-400/60">{gestureDepth.toFixed(3)}</span>
             </div>
           </>
         )}
-        {handDetected && currentGesture.type === "idle" && (
+        {handDetected && gestureType === "idle" && (
           <div className="text-emerald-400/50 text-[10px] tracking-widest">
             TRACKING
           </div>

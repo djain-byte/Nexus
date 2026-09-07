@@ -3,6 +3,7 @@
 import { Canvas } from "@react-three/fiber";
 import { Suspense, useEffect } from "react";
 import { Environment } from "@react-three/drei";
+import { Physics, RigidBody } from "@react-three/rapier";
 import { Lighting } from "./Lighting";
 import { Particles } from "./Particles";
 import { VolumetricFog } from "./VolumetricFog";
@@ -11,6 +12,8 @@ import { CameraDrift } from "./CameraDrift";
 import { Effects } from "./Effects";
 import { GroundGrid } from "./GroundGrid";
 import { CardOrbit } from "../cards/CardOrbit";
+import { WakeAnimation } from "../ai/WakeAnimation";
+import { HolographicResponse } from "../ai/HolographicResponse";
 import { useAppStore } from "@/stores/useAppStore";
 
 interface SceneProps {
@@ -36,12 +39,22 @@ function SceneContent({ onSwipe, onPinch, onRelease, onSelect }: SceneProps) {
       <VolumetricFog />
       <LightBeams />
       <GroundGrid />
-      <CardOrbit
-        onSwipe={onSwipe}
-        onPinch={onPinch}
-        onRelease={onRelease}
-        onSelect={onSelect}
-      />
+      <Physics gravity={[0, -9.81, 0]} debug={false}>
+        <CardOrbit
+          onSwipe={onSwipe}
+          onPinch={onPinch}
+          onRelease={onRelease}
+          onSelect={onSelect}
+        />
+        <RigidBody type="fixed" colliders={false}>
+          <mesh position={[0, -3, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+            <planeGeometry args={[50, 50]} />
+            <meshBasicMaterial visible={false} />
+          </mesh>
+        </RigidBody>
+      </Physics>
+      <WakeAnimation />
+      <HolographicResponse />
       <Effects />
       <Environment preset="night" />
     </>

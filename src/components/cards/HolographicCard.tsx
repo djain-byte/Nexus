@@ -2,13 +2,17 @@
 
 import { useRef, useMemo, useState, useCallback, useEffect } from "react";
 import { useFrame } from "@react-three/fiber";
-import { RoundedBox, Text } from "@react-three/drei";
+import { RoundedBox, Text, MeshTransmissionMaterial } from "@react-three/drei";
+import { useSpring, animated } from "@react-spring/three";
 import * as THREE from "three";
 import { CardModule, CardState } from "@/types";
 import { useGestureStore } from "@/stores/useGestureStore";
 import { useAppStore } from "@/stores/useAppStore";
-import { useSpringAnimation } from "@/hooks/useSpringAnimation";
 import { COLORS } from "@/utils/constants";
+import { EnergyPulse } from "./EnergyPulse";
+import { ParticleTrail } from "./ParticleTrail";
+
+const AnimatedGroup = animated.group;
 
 interface HolographicCardProps {
   module: CardModule;
@@ -20,6 +24,15 @@ interface HolographicCardProps {
   onRelease?: () => void;
   onSelect?: () => void;
 }
+
+const SPRING_CONFIGS: Record<CardState, { tension: number; friction: number }> = {
+  idle: { tension: 80, friction: 20 },
+  hovered: { tension: 200, friction: 18 },
+  selected: { tension: 300, friction: 22 },
+  expanded: { tension: 100, friction: 26 },
+  focused: { tension: 160, friction: 24 },
+  dragging: { tension: 400, friction: 30 },
+};
 
 export function HolographicCard({
   module: mod,
@@ -34,32 +47,60 @@ export function HolographicCard({
   const groupRef = useRef<THREE.Group>(null);
   const glowRef = useRef<THREE.Mesh>(null);
   const innerGlowRef = useRef<THREE.Mesh>(null);
+  const borderRefs = useRef<THREE.Mesh[]>([]);
 
   const [cardState, setCardState] = useState<CardState>("idle");
-  const { currentGesture } = useGestureStore();
-  const { setActiveModule, expandedCard, setExpandedCard } = useAppStore();
-
-  const springX = useSpringAnimation({ tension: 120, friction: 20 });
-  const springY = useSpringAnimation({ tension: 80, friction: 15 });
-  const springZ = useSpringAnimation({ tension: 120, friction: 20 });
-  const springScale = useSpringAnimation({ tension: 200, friction: 20 });
-  const springGlow = useSpringAnimation({ tension: 100, friction: 18 });
-  const springExpand = useSpringAnimation({ tension: 150, friction: 22 });
+  const gestureType = useGestureStore((s) => s.currentGesture.type);
+  const setActiveModule = useAppStore((s) => s.setActiveModule);
+  const expandedCard = useAppStore((s) => s.expandedCard);
+  const setExpandedCard = useAppStore((s) => s.setExpandedCard);
 
   const cardColor = useMemo(() => new THREE.Color(mod.color), [mod.color]);
   const isExpanded = expandedCard === mod.id;
+  const isDragging = cardState === "dragging";
+  const isSelected = cardState === "selected";
 
-  // Handle pinch to expand
+  const [springs, springApi] = useSpring(() => ({
+    scale: [1, 1, 1] as [number, number, number],
+    glowIntensity: 0.3,
+    borderOpacity: 0.15,
+    config: SPRING_CONFIGS.idle,
+  }));
+
   useEffect(() => {
-    if (isCenter && currentGesture.type === "pinch_start") {
+    const config = SPRING_CONFIGS[cardState];
+    switch (cardState) {
+      case "idle":
+        springApi.start({ scale: [1, 1, 1], glowIntensity: 0.3, borderOpacity: 0.15, config });
+        break;
+      case "hovered":
+        springApi.start({ scale: [1.05, 1.05, 1.05], glowIntensity: 0.6, borderOpacity: 0.4, config });
+        break;
+      case "selected":
+        springApi.start({ scale: [1.1, 1.1, 1.1], glowIntensity: 0.8, borderOpacity: 0.7, config });
+        break;
+      case "expanded":
+        springApi.start({ scale: [1.8, 1.8, 1.0], glowIntensity: 1.0, borderOpacity: 0.95, config });
+        break;
+      case "focused":
+        springApi.start({ scale: [1.3, 1.3, 1.0], glowIntensity: 1.0, borderOpacity: 0.8, config });
+        break;
+      case "dragging":
+        springApi.start({ scale: [0.95, 0.95, 0.95], glowIntensity: 0.9, borderOpacity: 0.6, config });
+        break;
+    }
+  }, [cardState, springApi]);
+
+  useEffect(() => {
+    if (isCenter && gestureType === "pinch_start") {
       onPinch?.();
     }
-    if (currentGesture.type === "pinch_release" && isExpanded) {
+    if (gestureType === "pinch_release" && isExpanded) {
       onRelease?.();
       setExpandedCard(null);
       setCardState("focused");
     }
-  }, [currentGesture, isCenter, isExpanded, onPinch, onRelease, setExpandedCard]);
+  }, [gestureType, isCenter, isExpanded, onPinch, onRelease, setExpandedCard]);
 
   useFrame((state, delta) => {
     if (!groupRef.current) return;
@@ -70,40 +111,24 @@ export function HolographicCard({
 
     const targetX = Math.sin(angle) * radius;
     const targetZ = Math.cos(angle) * radius;
-    const targetY = isExpanded ? 0.5 : Math.sin(t * 0.5 + index * 0.7) * 0.08;
+    const floatY = cardState === "idle" ? Math.sin(t * 0.5 + index * 0.7) * 0.05 : 0;
+    const targetY = isExpanded ? 0.5 : floatY;
 
-    springX.setTarget(targetX);
-    springY.setTarget(targetY);
-    springZ.setTarget(targetZ);
+    groupRef.current.position.x += (targetX - groupRef.current.position.x) * 0.05;
+    groupRef.current.position.y += (targetY - groupRef.current.position.y) * 0.05;
+    groupRef.current.position.z += (targetZ - groupRef.current.position.z) * 0.05;
 
-    let targetScale = 0.9;
-    if (isExpanded) targetScale = 1.4;
-    else if (isCenter) targetScale = 1.15;
-    springScale.setTarget(targetScale);
-
-    const targetGlow = isExpanded ? 1.5 : isCenter ? 1 : 0.3;
-    springGlow.setTarget(targetGlow);
-
-    springExpand.setTarget(isExpanded ? 1 : 0);
-
-    const x = springX.update(delta);
-    const y = springY.update(delta);
-    const z = springZ.update(delta);
-    const scale = springScale.update(delta);
-    const glow = springGlow.update(delta);
-
-    groupRef.current.position.set(x, y, z);
-    groupRef.current.scale.setScalar(scale);
-    groupRef.current.lookAt(0, y, 0);
+    groupRef.current.scale.set(springs.scale.get()[0], springs.scale.get()[1], springs.scale.get()[2]);
+    groupRef.current.lookAt(0, groupRef.current.position.y, 0);
 
     if (glowRef.current) {
       const mat = glowRef.current.material as THREE.MeshBasicMaterial;
-      mat.opacity = 0.3 + glow * 0.5;
+      mat.opacity = 0.3 + springs.glowIntensity.get() * 0.5;
     }
 
     if (innerGlowRef.current) {
       const mat = innerGlowRef.current.material as THREE.MeshBasicMaterial;
-      mat.opacity = 0.05 + glow * 0.15;
+      mat.opacity = 0.05 + springs.glowIntensity.get() * 0.15;
     }
   });
 
@@ -121,34 +146,42 @@ export function HolographicCard({
 
   const borderColor = isExpanded
     ? COLORS.WARNING_ORANGE
+    : isSelected
+    ? mod.accentColor
     : isCenter
     ? "#FFD700"
     : mod.color;
 
   return (
-    <group ref={groupRef}>
-      {/* Card body */}
+    <AnimatedGroup ref={groupRef}>
+      {/* Card body with glass material */}
       <RoundedBox
-        args={[2.2, 1.4, 0.06]}
+        args={[2.2, 1.4, 0.05]}
         radius={0.08}
         smoothness={4}
         onClick={handleClick}
         onPointerOver={() => setCardState("hovered")}
         onPointerOut={() => setCardState(isExpanded ? "expanded" : "idle")}
       >
-        <meshStandardMaterial
-          color="#1a1a3e"
-          emissive={cardColor}
-          emissiveIntensity={isExpanded ? 0.5 : isCenter ? 0.3 : 0.1}
-          metalness={0.3}
-          roughness={0.4}
+        <MeshTransmissionMaterial
+          backside
+          samples={6}
+          thickness={0.2}
+          chromaticAberration={0.05}
+          anisotropy={0.3}
+          distortion={0.0}
+          distortionScale={0.3}
+          temporalDistortion={0.0}
+          color={mod.color}
+          roughness={0.1}
+          metalness={0.1}
           transparent
-          opacity={0.9}
+          opacity={0.7}
         />
       </RoundedBox>
 
       {/* Inner glow */}
-      <mesh ref={innerGlowRef} position={[0, 0, 0.035]}>
+      <mesh ref={innerGlowRef} position={[0, 0, 0.03]}>
         <planeGeometry args={[2.0, 1.2]} />
         <meshBasicMaterial
           color={cardColor}
@@ -183,7 +216,7 @@ export function HolographicCard({
           <meshBasicMaterial
             color={borderColor}
             transparent
-            opacity={isExpanded ? 0.95 : isCenter ? 0.8 : 0.5}
+            opacity={springs.borderOpacity.get()}
           />
         </mesh>
       ))}
@@ -241,6 +274,20 @@ export function HolographicCard({
         )
       )}
 
+      {/* Energy pulse on select */}
+      <EnergyPulse
+        active={isSelected}
+        color={mod.color}
+        position={[0, 0, 0.05]}
+      />
+
+      {/* Particle trail on drag */}
+      <ParticleTrail
+        active={isDragging}
+        position={groupRef.current?.position || new THREE.Vector3()}
+        color={mod.color}
+      />
+
       {/* Expanded state: extra info panel */}
       {isExpanded && (
         <group position={[0, -0.8, 0.04]}>
@@ -272,6 +319,6 @@ export function HolographicCard({
           </Text>
         </group>
       )}
-    </group>
+    </AnimatedGroup>
   );
 }

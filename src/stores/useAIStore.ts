@@ -1,37 +1,82 @@
 import { create } from "zustand";
-import { AIStatus } from "@/ai/brain";
 
-interface AIState {
-  status: AIStatus;
-  panelVisible: boolean;
-  responseText: string;
-  interimText: string;
-  isListening: boolean;
-  wakeWordActive: boolean;
-  apiKey: string;
-  setStatus: (status: AIStatus) => void;
-  setPanelVisible: (visible: boolean) => void;
-  setResponseText: (text: string) => void;
-  setInterimText: (text: string) => void;
-  setIsListening: (listening: boolean) => void;
-  setWakeWordActive: (active: boolean) => void;
-  setApiKey: (key: string) => void;
+export type AIStatus =
+  | "idle"
+  | "listening"
+  | "thinking"
+  | "speaking"
+  | "interrupted"
+  | "offline"
+  | "streaming";
+
+interface ConversationEntry {
+  role: "user" | "assistant";
+  content: string;
+  timestamp: number;
 }
 
-export const useAIStore = create<AIState>((set) => ({
-  status: "idle",
-  panelVisible: false,
-  responseText: "",
-  interimText: "",
-  isListening: false,
-  wakeWordActive: true,
-  apiKey: "",
+interface AIStore {
+  status: AIStatus;
+  setStatus: (status: AIStatus) => void;
 
+  isListening: boolean;
+  setIsListening: (v: boolean) => void;
+  wakeWordActive: boolean;
+  setWakeWordActive: (v: boolean) => void;
+  interimTranscript: string;
+  setInterimTranscript: (text: string) => void;
+
+  responseText: string;
+  setResponseText: (text: string) => void;
+  streamingText: string;
+  setStreamingText: (text: string) => void;
+  appendStreamingText: (chunk: string) => void;
+
+  history: ConversationEntry[];
+  addToHistory: (entry: ConversationEntry) => void;
+  clearHistory: () => void;
+
+  activeModuleContext: string | null;
+  setActiveModuleContext: (module: string | null) => void;
+
+  apiKey: string;
+  setApiKey: (key: string) => void;
+
+  panelVisible: boolean;
+  setPanelVisible: (v: boolean) => void;
+}
+
+export const useAIStore = create<AIStore>((set) => ({
+  status: "idle",
   setStatus: (status) => set({ status }),
-  setPanelVisible: (visible) => set({ panelVisible: visible }),
-  setResponseText: (text) => set({ responseText: text }),
-  setInterimText: (text) => set({ interimText: text }),
-  setIsListening: (listening) => set({ isListening: listening }),
-  setWakeWordActive: (active) => set({ wakeWordActive: active }),
-  setApiKey: (key) => set({ apiKey: key }),
+
+  isListening: false,
+  setIsListening: (isListening) => set({ isListening }),
+  wakeWordActive: false,
+  setWakeWordActive: (wakeWordActive) => set({ wakeWordActive }),
+  interimTranscript: "",
+  setInterimTranscript: (interimTranscript) => set({ interimTranscript }),
+
+  responseText: "",
+  setResponseText: (responseText) => set({ responseText }),
+  streamingText: "",
+  setStreamingText: (streamingText) => set({ streamingText }),
+  appendStreamingText: (chunk) =>
+    set((s) => ({ streamingText: s.streamingText + chunk })),
+
+  history: [],
+  addToHistory: (entry) =>
+    set((s) => ({
+      history: [...s.history.slice(-19), entry],
+    })),
+  clearHistory: () => set({ history: [] }),
+
+  activeModuleContext: null,
+  setActiveModuleContext: (activeModuleContext) => set({ activeModuleContext }),
+
+  apiKey: "",
+  setApiKey: (apiKey) => set({ apiKey }),
+
+  panelVisible: false,
+  setPanelVisible: (panelVisible) => set({ panelVisible }),
 }));
